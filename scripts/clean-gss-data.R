@@ -1,11 +1,11 @@
-# The raw GSS data used in this script is not provided in the repository. 
-# It can be downloaded at 'http://gss.norc.org/get-the-data/spss'.
-
 library(tidyverse)
 library(haven)
 library(readxl)
 
-gss_full <- read_sav("data/GSS7218_R2.sav")
+# The raw GSS data used in this script is not provided in the repository. 
+# It can be downloaded at 'http://gss.norc.org/get-the-data/spss'.
+# gss_full <- read_sav("data/GSS7218_R2.sav")
+
 # Moral policy issues:
 moralpol_issues <- read_rds("data/moral-policy-issues.rds") %>% 
   pull(code)
