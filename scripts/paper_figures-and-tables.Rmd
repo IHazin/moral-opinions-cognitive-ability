@@ -1,0 +1,515 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+
+library(tidyverse)
+library(kableExtra)
+
+```
+
+
+# Read data:
+```{r}
+
+# General Social Survey data (1974-2018):
+gss <- read_rds("../data/gss_clean.rds")
+
+# Argument advantage data:
+adv_data <- read_rds("../data/argument-advantage_clean.rds") %>% 
+  # Scale 'hvfl_advantage':
+  mutate(hvfl_advantage_sc = scale(hvfl_advantage)[, 1])
+
+```
+
+# Add argument advantage data to GSS data:
+```{r}
+
+gss <- gss %>% 
+  left_join(adv_data) %>% 
+  # Re-code 'opinion' so that it reflects whether the respondent supports the position with hvfl advantage:
+  mutate(adv_opinion = ifelse(hvfl_advantage < 0, 1 - opinion, opinion),
+  # Re-code 'adv_opinion' for 'gunlaw': for this issue (and this issue only), the default liberal position (i.e., pro gun laws) does NOT have the hvfl advantage. 'lib_opinion' thus reflects whether the respondent supports the liberal position.
+         lib_opinion = ifelse(issue == "gunlaw", 1 - adv_opinion, adv_opinion)) %>% 
+  select(id:log_fincome_sc, issue, hvfl_advantage, hvfl_advantage_sc, everything())
+
+```
+
+
+# Results:
+
+## Figure 2:
+
+Support for liberal moral policies increases with time in the population and at the individual level it is associated with higher cognitive ability, especially among liberals.
+
+Panels A and B:
+```{r}
+
+# Support for legal abortion over time:
+panelA <- gss %>% 
+  filter(issue == "abany") %>% 
+  drop_na(wordsum_gr) %>% 
+  group_by(year) %>%
+  # Calculate the proportion of participants holding the pro - advantaged - opinion:
+  summarise(mean_opinion = mean(opinion)) %>% 
+  ggplot(aes(year, mean_opinion)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = c(0.25, 0.5, 0.75), color = "grey") +
+  ylim(0, 1) +
+  xlim(1974, 2020) +
+  theme_classic(base_size = 13) +
+  cowplot::panel_border(color = "grey20") +
+  labs(x = "Year", y = "Proportion supporting the policy") +
+  ggtitle("Abortion for any reason")
+
+# Support for the removal of books from public libraries:
+panelB <- gss %>% 
+  filter(issue == "libhomo") %>% 
+  drop_na(wordsum_gr) %>% 
+  group_by(year) %>%
+  # Calculate the proportion of participants holding the pro - disadvantaged - opinion:
+  summarise(mean_opinion = mean(opinion)) %>% 
+  ggplot(aes(year, mean_opinion)) +
+  geom_point() +
+  geom_line() +
+  geom_hline(yintercept = c(0.25, 0.5, 0.75), color = "grey") +
+  ylim(0, 1) +
+  xlim(1974, 2020) +
+  theme_classic(base_size = 13) +
+  cowplot::panel_border(color = "grey20") +
+  labs(x = "Year", y = "Proportion supporting the policy") +
+  ggtitle("Ban books in favor of homosexuality from public library")
+
+```
+
+Panels C and D:
+```{r}
+
+# Panel C: abortion for any reason
+panelC <- gss %>% 
+  filter(issue == "abany") %>% 
+  drop_na(wordsum_gr) %>% 
+  group_by(polviews_full, wordsum_gr) %>%
+  # Calculate the proportion of participants holding the pro - advantaged - opinion:
+  summarise(mean_lib_opinion = mean(lib_opinion)) %>% 
+  ggplot(aes(polviews_full, mean_lib_opinion, color = wordsum_gr)) +
+  geom_point() +
+  geom_hline(yintercept = c(0.25, 0.5, 0.75), color = "grey") +
+  scale_color_grey(start = .2, end = .7) +
+  ylim(0, 1) +
+  labs(x = NULL, y = "Proportion supporting the policy", color = "Verbal ability") +
+  theme_classic(base_size = 13) +
+  theme(legend.position = "none", 
+        axis.text.x = element_text(size = 10)) +
+  cowplot::panel_border(color = "grey20")
+
+
+# Panel D: ban books in favor of homosexuality from public libraries 
+panelD <- gss %>% 
+  filter(issue == "libhomo") %>% 
+  drop_na(wordsum_gr) %>% 
+  group_by(polviews_full, wordsum_gr) %>%
+  # Calculate the proportion of participants holding the pro - disadvantaged - opinion: 
+  summarise(mean_opinion = mean(opinion)) %>% 
+  ggplot(aes(polviews_full, mean_opinion, color = wordsum_gr)) +
+  geom_point() +
+  geom_hline(yintercept = c(0.25, 0.5, 0.75), color = "grey") +
+  scale_color_grey(start = .2, end = .7) +
+  ylim(0, 1) +
+  labs(x = NULL, y = "Proportion supporting the policy", color = "Verbal ability") +
+  theme_classic(base_size = 13) +
+  theme(axis.text.x = element_text(size = 10),
+        legend.position = c(0.865, 0.865)) +
+  cowplot::panel_border(color = "grey20") 
+
+```
+
+All panels:
+```{r}
+
+cowplot::plot_grid(panelA, panelB, panelC, panelD, ncol = 2, labels = "AUTO", align = "v")
+
+ggsave("../figures/figure2.jpeg", width = 13, height = 8)
+
+```
+
+## Figure 3:
+
+The argument advantage of a moral policy predicts how support for the policy varies with time and with respondents’ ideology and cognitive ability.
+
+Run the model and get coefficients:
+```{r}
+
+# Aggregate 'gss' by issue:
+gss_by_issue <- gss %>%
+  group_by(issue, hvfl_advantage) %>%
+  nest()
+
+# The function below runs the model and returns a summary of the model's coefficients: 
+model_function <- function(data) {
+ m <- glm(opinion ~ time + polviews_cont_sc*wordsum_sc + educ_sc + age_sc + sex + race + log_fincome_sc + news_cont_sc,
+            data,
+            weights = wgt,
+            family = quasibinomial())
+  
+  m_sum <- as.data.frame(summary(m)$coefficients)
+  m_sum$var <- rownames(m_sum)
+  
+  return(m_sum)
+}
+
+# For each issue, run 'model_function':
+models_data <- gss_by_issue %>%
+  mutate(model = map(data, ~model_function(.))) %>%
+  select(-data)
+
+# Unnest 'models_data' to get coefficients:
+coefficients <- models_data %>%
+  unnest() %>% 
+  select(issue, hvfl_advantage, var, effect = Estimate) %>% 
+  spread(var, effect) %>% 
+  select(issue, hvfl_advantage, `(Intercept)`, time, everything())
+
+```
+
+Calculate correlations between opinion trends and argument advantage:
+```{r}
+
+coefficients %>%
+  ungroup() %>% 
+  select(hvfl_advantage, time, polviews_cont_sc, wordsum_sc) %>% 
+  cor()
+
+# Confidence intervals:
+cor.test(coefficients$hvfl_advantage, coefficients$time)
+cor.test(coefficients$hvfl_advantage, coefficients$polviews_cont_sc)
+cor.test(coefficients$hvfl_advantage, coefficients$wordsum_sc)
+
+```
+
+### Fig.3 - Panel A:
+
+Estimate linear effects of the year of the survey on the support for each moral policy:
+```{r}
+
+# The function below returns the model itself instead of the model's coefficients: 
+model_function <- function(data) {
+ m <- glm(opinion ~ time + polviews_cont_sc*wordsum_sc + educ_sc + age_sc + sex + race + log_fincome_sc + news_cont_sc,
+            data,
+            weights = wgt,
+            family = quasibinomial())
+
+  return(m)
+}
+
+# For each issue, run 'model_function':
+models_data <- gss_by_issue %>%
+  mutate(model = map(data, ~model_function(.))) %>%
+  select(-data)
+
+# For each issue, make reference grids:
+new_data_A <- gss %>%
+  group_by(time, issue, sex, race) %>%
+  count()
+
+reference_grid_A <- models_data %>%
+  mutate(ref_grid = map(model, ~emmeans::ref_grid(.) @ grid)) %>%
+  unnest(ref_grid) %>%
+  select(-time, -`.wgt.`) %>%
+  left_join(new_data_A %>%
+              # Add correct weights:
+              rename(`.wgt.` = n))
+
+# Use the model and the reference grid to predict opinion:
+predictions_A <- reference_grid_A %>%
+  group_by(issue, hvfl_advantage, model) %>%
+  nest() %>%
+  mutate(predictions = map2(model, data, ~predict.glm(.x, .y, type = "response"))) %>%
+  ungroup() %>%
+  select(-model) %>%
+  unnest() %>%
+  # Average predictions across categorical variables (sex and race):
+  group_by(issue, hvfl_advantage, time) %>%
+  summarise(predictions = mean(predictions))
+
+# Adjust intercepts so that all lines coincide in the median year:
+panelA <- predictions_A %>% 
+  # Calculate distance between predictions at median time (2.2) and the center of the y-axis (y = 0.55): 
+  left_join(predictions_A %>% 
+              group_by(issue) %>% 
+              filter(time == 2.2) %>% 
+              mutate(predictions - 0.55)) %>% 
+  group_by(issue, hvfl_advantage) %>% 
+  fill(`predictions - 0.55`, .direction = "downup") %>% 
+  # Adjust intercepts:
+  mutate(adjusted_predictions = predictions - `predictions - 0.55`,
+         # Transform time in year:
+         year = (time * 10) + 1972) %>%
+  ggplot(aes(x = year, y = adjusted_predictions, group = issue, color = hvfl_advantage)) +
+  geom_line(size = 0.75) +
+  scale_colour_gradient(low = "red", high = "blue") +
+  ylim(0.1, 0.9) +
+  labs(x = "Year", y = "Support for each moral policy\n(adjusted predictions)") +
+  theme_classic(base_size = 13) +
+  theme(legend.position = "none") 
+
+```
+
+### Fig.3 - Panel B:
+
+Estimate linear effects of ideology on the support for each moral policy:
+
+```{r}
+
+# ! If you ran 'model_function' in the last chunk, there is no need to run it again. 
+# # For each issue, run 'model_function':
+# models_data <- gss_by_issue %>%
+#   mutate(model = map(data, ~model_function(.))) %>%
+#   select(-data)
+
+# For each issue, make reference grids:
+new_data_B <- gss %>%
+  group_by(polviews_cont_sc, issue, sex, race) %>%
+  count()
+
+reference_grid_B <- models_data %>%
+  mutate(ref_grid = map(model, ~emmeans::ref_grid(.) @ grid)) %>%
+  unnest(ref_grid) %>%
+  select(-polviews_cont_sc, -`.wgt.`) %>%
+  left_join(new_data_B %>%
+              # Add correct weights:
+              rename(`.wgt.` = n))
+
+# Use the model and the reference grid to predict opinion:
+predictions_B <- reference_grid_B %>%
+  group_by(issue, hvfl_advantage, model) %>%
+  nest() %>%
+  mutate(predictions = map2(model, data, ~predict.glm(.x, .y, type = "response"))) %>%
+  ungroup() %>%
+  select(-model) %>%
+  unnest() %>%
+  # Round polviews_cont_sc:
+  mutate(polviews_cont_sc = round(polviews_cont_sc, 3)) %>% 
+  # Average predictions across categorical variables (sex and race):
+  group_by(issue, hvfl_advantage, polviews_cont_sc) %>%
+  summarise(predictions = mean(predictions))
+
+# Adjust intercepts so that all lines coincide around moderates:
+panelB <- predictions_B %>% 
+  # Calculate distance between moderates (0.0561) and the center of the y-axis (y = 0.55): 
+  left_join(predictions_B %>%
+              group_by(issue) %>% 
+              filter(polviews_cont_sc == 0.056) %>% 
+              mutate(predictions - 0.55)) %>% 
+  group_by(issue, hvfl_advantage) %>% 
+  fill(`predictions - 0.55`, .direction = "downup") %>% 
+  # Adjust intercepts:
+  mutate(adjusted_predictions = predictions - `predictions - 0.55`,
+         # Transform polviews_cont_sc:
+         polviews_full = factor(polviews_cont_sc, 
+                                   levels = c(sort(unique(predictions_B$polviews_cont_sc))), 
+                                   labels = c("Extremely\nconservative",
+                                              "Conservative",
+                                              "Slightly\nconservative", 
+                                              "Moderate",
+                                              "Slightly\nliberal", 
+                                              "Liberal", 
+                                              "Extremely\nliberal"))) %>%
+  ggplot(aes(x = polviews_full, y = adjusted_predictions, group = issue, color = hvfl_advantage)) +
+  geom_line(size = 0.75) +
+  scale_colour_gradient(low = "red", high = "blue") +
+  ylim(0.1, 0.9) +
+  labs(x = "Ideology", y = NULL) +
+  theme_classic(base_size = 13) +
+  theme(legend.position = "none")
+
+```
+
+### Fig.3 - Panel C:
+
+Estimate linear effects of cognitive ability on the support for each moral policy:
+
+```{r}
+
+# ! If you ran 'model_function' in the last chunk, there is no need to run it again. 
+# # For each issue, run 'model_function':
+# models_data <- gss_by_issue %>%
+#   mutate(model = map(data, ~model_function(.))) %>%
+#   select(-data)
+
+# For each issue, make reference grids:
+new_data_C <- gss %>%
+  group_by(wordsum_sc, issue, sex, race) %>%
+  count()
+
+reference_grid_C <- models_data %>%
+  mutate(ref_grid = map(model, ~emmeans::ref_grid(.) @ grid)) %>%
+  unnest(ref_grid) %>%
+  select(-wordsum_sc, -`.wgt.`) %>%
+  left_join(new_data_C %>%
+              # Add correct weights:
+              rename(`.wgt.` = n))
+
+# Use the model and the reference grid to predict opinion:
+predictions_C <- reference_grid_C %>%
+  group_by(issue, hvfl_advantage, model) %>%
+  nest() %>%
+  mutate(predictions = map2(model, data, ~predict.glm(.x, .y, type = "response"))) %>%
+  ungroup() %>%
+  select(-model) %>%
+  unnest() %>%
+  # Round wordsum_sc:
+  mutate(wordsum_sc = round(wordsum_sc, 3)) %>% 
+  # Average predictions across categorical variables (sex and race):
+  group_by(issue, hvfl_advantage, wordsum_sc) %>%
+  summarise(predictions = mean(predictions))
+
+# Adjust intercepts so that all lines coincide around moderates:
+panelC <- predictions_C %>% 
+  # Calculate distance between median cognitive ability (-0.522) and the center of the y-axis (y = 0.55): 
+  left_join(predictions_C %>%
+              group_by(issue) %>% 
+              filter(wordsum_sc == -0.522) %>% 
+              mutate(predictions - 0.55)) %>% 
+  group_by(issue, hvfl_advantage) %>% 
+  fill(`predictions - 0.55`, .direction = "downup") %>% 
+  # Adjust intercepts:
+  mutate(adjusted_predictions = predictions - `predictions - 0.55`,
+         wordsum_sc = (wordsum_sc * sd(gss$wordsum)) + mean(gss$wordsum)) %>%
+  ggplot(aes(x = wordsum_sc, y = adjusted_predictions, group = issue, color = hvfl_advantage)) +
+  geom_line(size = 0.75) +
+  scale_colour_gradient(low = "red", high = "blue") +
+  ylim(0.1, 0.9) +
+  labs(x = "Verbal ability", y = NULL) +
+  theme_classic(base_size = 13)
+
+```
+
+### All panels:
+```{r}
+
+cowplot::plot_grid(panelA, panelB, panelC, nrow = 1, labels = c("A", "B", "C"), label_x = c(0.05, 0, 0), align = "h")
+
+ggsave("../figures/figure3.jpeg", width = 20, height = 6.5)
+
+```
+
+## Figure 4:
+
+The argument advantage of a moral policy predicts how support for the policy varies with respondents’ cognitive ability, especially among liberals.
+
+```{r}
+
+# Aggregate 'gss' by issue and ideology:
+gss_by_issue_polviews <- gss %>% 
+  group_by(issue, hvfl_advantage, polviews_full) %>% 
+  nest()
+
+# The function below runs the model and returns a summary of the model's coefficients: 
+model_function <- function(data){
+  m <- glm(opinion ~ time + wordsum_sc + educ_sc + age_sc + sex + race + log_fincome_sc + news_cont_sc,
+                     data,
+                     weights = wgt,
+                     family = quasibinomial())
+  
+  m_sum <- as.data.frame(summary(m)$coefficients)
+  m_sum$var <- rownames(m_sum)
+  
+  return(m_sum)
+}
+
+# For each issue, run 'model_function':
+models_data <- gss_by_issue_polviews %>%
+  mutate(model = map(data, ~model_function(.))) %>%
+  select(-data)
+  
+# Unnest 'models_data' to get the effect of cognitive ability:
+coefficients <- models_data %>%
+  unnest() %>% 
+  select(issue, hvfl_advantage, polviews_full, var, effect = Estimate) %>% 
+  # Filter effect of cognitive ability:
+  filter(var == "wordsum_sc")
+
+# For each ideology, calculate the correlation between the effect of cognitive ability and hvfl_advantage:
+r_sq <- coefficients %>% 
+  group_by(polviews_full) %>%
+  summarise(r_sq = round(cor(hvfl_advantage, effect)^2*100)) %>%
+  mutate(r_sq = paste0(r_sq, "%")) 
+
+# Plot:
+coefficients %>% 
+  ggplot(aes(hvfl_advantage, effect, label = issue)) +
+  geom_point(size = 1.5, shape = 19, color = "#12213B", alpha = .5) +
+  geom_smooth(size = .7, method = "lm", fullrange = TRUE, color = "grey10") +
+  geom_text(data = r_sq, aes(label = r_sq), x = .1, y = 1) +
+  facet_wrap(~polviews_full, nrow = 1) +
+  labs(x = "Argument advantage of the moral policy", 
+       y = "Effect of verbal ability on the\nsupport for a moral policy") +
+  theme_classic(base_size = 13) 
+
+ggsave("../figures/figure4.jpeg", dpi = 350, width = 14, height = 14*.3)
+
+```
+
+Correlation between interaction effects and issues' argument advantage:
+```{r}
+
+cor_data <- coefficients %>% 
+  # Average cognitive ability effects across ideology:
+  group_by(issue, hvfl_advantage) %>% 
+  summarise(avg_wordsum_eff = mean(effect))
+  
+cor.test(cor_data$hvfl_advantage, cor_data$avg_wordsum_eff)
+
+```
+
+
+# Materials and Methods:
+
+GSS waves included in this study:
+```{r}
+
+gss %>% 
+  distinct(year) %>% 
+  pull(year)
+
+```
+
+
+Total number of respondents:
+```{r}
+
+gss %>% 
+  group_by(issue) %>% 
+  summarise(n_ids = n_distinct(id_year)) %>%
+  ungroup() %>% 
+  summarise(min(n_ids),
+            max(n_ids))
+
+```
+
+
+# Supplementary material:
+
+## Table S1:
+```{r}
+
+moralpol_issues <- read_rds("../data/moral-policy-issues.rds")
+
+adv_data %>% 
+  select(-hvfl_advantage_sc) %>% 
+  rename(`Moral policy code` = issue, `Argument advantage` = hvfl_advantage) %>% 
+  left_join(moralpol_issues %>% 
+              select(`Moral policy code` = code, 
+                     `Moral policy wording` = question)) %>% 
+  select(`Moral policy code`, `Moral policy wording`, `Argument advantage`) %>%
+  mutate(`Argument advantage` = round(`Argument advantage`, 3)) %>% 
+  kbl()
+
+```
+
+
+
