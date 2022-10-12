@@ -175,18 +175,20 @@ fig3_coefficients <- fig3_models_data %>%
 
 ```
 
-Calculate correlations between opinion trends and argument advantage:
+Calculate correlations:
 ```{r}
 
-fig3_coefficients %>%
-  ungroup() %>% 
-  select(hvfl_advantage, time, polviews_cont_sc, wordsum_sc) %>% 
-  cor()
-
-# Confidence intervals:
+# Between opinion trends and argument advantage:
 cor.test(fig3_coefficients$hvfl_advantage, fig3_coefficients$time)
+
+# Between ideology and argument advantage:
 cor.test(fig3_coefficients$hvfl_advantage, fig3_coefficients$polviews_cont_sc)
+
+# Between cognitive ability and argument advantage:
 cor.test(fig3_coefficients$hvfl_advantage, fig3_coefficients$wordsum_sc)
+
+# Between the ideology-cognitive ability interaction and argument advantage:
+cor.test(fig3_coefficients$hvfl_advantage, fig3_coefficients$`polviews_cont_sc:wordsum_sc`)
 
 ```
 
@@ -379,7 +381,8 @@ panelC <- predictions_C %>%
   # Adjust intercepts:
   mutate(adjusted_predictions = predictions - `predictions - 0.55`,
          wordsum_sc = (wordsum_sc * sd(gss$wordsum)) + mean(gss$wordsum)) %>%
-  ggplot(aes(x = wordsum_sc, y = adjusted_predictions, group = issue, color = hvfl_advantage)) +
+  rename(`Argument\nadvantage` = hvfl_advantage) %>% 
+  ggplot(aes(x = wordsum_sc, y = adjusted_predictions, group = issue, color = `Argument\nadvantage`)) +
   geom_line(size = 0.75) +
   scale_colour_gradient(low = "red", high = "blue") +
   ylim(0.1, 0.9) +
@@ -421,7 +424,7 @@ fig4_model_function <- function(data){
   return(m_sum)
 }
 
-# For each issue, run 'fig4_model_function':
+# For each issue and ideology, run 'fig4_model_function':
 fig4_models_data <- gss_by_issue_polviews %>%
   mutate(model = map(data, ~fig4_model_function(.))) %>%
   select(-data)
@@ -454,18 +457,6 @@ ggsave("../figures/figure4.jpeg", dpi = 350, width = 14, height = 14*.3)
 
 ```
 
-Correlation between interaction effects and issues' argument advantage:
-```{r}
-
-cor_data <- fig4_coefficients %>% 
-  # Average cognitive ability effects across ideology:
-  group_by(issue, hvfl_advantage) %>% 
-  summarise(avg_wordsum_eff = mean(effect))
-  
-cor.test(cor_data$hvfl_advantage, cor_data$avg_wordsum_eff)
-
-```
-
 
 # Materials and Methods:
 
@@ -477,7 +468,6 @@ gss %>%
   pull(year)
 
 ```
-
 
 Total number of respondents:
 ```{r}
