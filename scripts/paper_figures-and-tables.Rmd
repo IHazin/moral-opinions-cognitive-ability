@@ -379,8 +379,7 @@ panelC <- predictions_C %>%
   # Adjust intercepts:
   mutate(adjusted_predictions = predictions - `predictions - 0.55`,
          wordsum_sc = (wordsum_sc * sd(gss$wordsum)) + mean(gss$wordsum)) %>%
-  rename(`Argument\nadvantage` = hvfl_advantage) %>% 
-  ggplot(aes(x = wordsum_sc, y = adjusted_predictions, group = issue, color = `Argument\nadvantage`)) +
+  ggplot(aes(x = wordsum_sc, y = adjusted_predictions, group = issue, color = hvfl_advantage)) +
   geom_line(size = 0.75) +
   scale_colour_gradient(low = "red", high = "blue") +
   ylim(0.1, 0.9) +
@@ -422,7 +421,7 @@ fig4_model_function <- function(data){
   return(m_sum)
 }
 
-# For each issue and ideology, run 'fig4_model_function':
+# For each issue, run 'fig4_model_function':
 fig4_models_data <- gss_by_issue_polviews %>%
   mutate(model = map(data, ~fig4_model_function(.))) %>%
   select(-data)
@@ -456,14 +455,6 @@ ggsave("../figures/figure4.jpeg", dpi = 350, width = 14, height = 14*.3)
 ```
 
 Correlation between interaction effects and issues' argument advantage:
-```{r}
-
-fig3_coefficients
-
-```
-
-
-
 ```{r}
 
 cor_data <- fig4_coefficients %>% 
