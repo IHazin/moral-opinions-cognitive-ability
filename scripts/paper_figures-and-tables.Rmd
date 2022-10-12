@@ -149,7 +149,7 @@ gss_by_issue <- gss %>%
   nest()
 
 # The function below runs the model and returns a summary of the model's coefficients: 
-model_function <- function(data) {
+fi3_model_function <- function(data) {
  m <- glm(opinion ~ time + polviews_cont_sc*wordsum_sc + educ_sc + age_sc + sex + race + log_fincome_sc + news_cont_sc,
             data,
             weights = wgt,
@@ -161,13 +161,13 @@ model_function <- function(data) {
   return(m_sum)
 }
 
-# For each issue, run 'model_function':
-models_data <- gss_by_issue %>%
-  mutate(model = map(data, ~model_function(.))) %>%
+# For each issue, run 'fi3_model_function':
+fig3_models_data <- gss_by_issue %>%
+  mutate(model = map(data, ~fi3_model_function(.))) %>%
   select(-data)
 
-# Unnest 'models_data' to get coefficients:
-coefficients <- models_data %>%
+# Unnest 'fig3_models_data' to get coefficients:
+fig3_coefficients <- fig3_models_data %>%
   unnest() %>% 
   select(issue, hvfl_advantage, var, effect = Estimate) %>% 
   spread(var, effect) %>% 
@@ -178,15 +178,15 @@ coefficients <- models_data %>%
 Calculate correlations between opinion trends and argument advantage:
 ```{r}
 
-coefficients %>%
+fig3_coefficients %>%
   ungroup() %>% 
   select(hvfl_advantage, time, polviews_cont_sc, wordsum_sc) %>% 
   cor()
 
 # Confidence intervals:
-cor.test(coefficients$hvfl_advantage, coefficients$time)
-cor.test(coefficients$hvfl_advantage, coefficients$polviews_cont_sc)
-cor.test(coefficients$hvfl_advantage, coefficients$wordsum_sc)
+cor.test(fig3_coefficients$hvfl_advantage, fig3_coefficients$time)
+cor.test(fig3_coefficients$hvfl_advantage, fig3_coefficients$polviews_cont_sc)
+cor.test(fig3_coefficients$hvfl_advantage, fig3_coefficients$wordsum_sc)
 
 ```
 
@@ -196,7 +196,7 @@ Estimate linear effects of the year of the survey on the support for each moral 
 ```{r}
 
 # The function below returns the model itself instead of the model's coefficients: 
-model_function <- function(data) {
+fi3_model_function2 <- function(data) {
  m <- glm(opinion ~ time + polviews_cont_sc*wordsum_sc + educ_sc + age_sc + sex + race + log_fincome_sc + news_cont_sc,
             data,
             weights = wgt,
@@ -205,9 +205,9 @@ model_function <- function(data) {
   return(m)
 }
 
-# For each issue, run 'model_function':
-models_data <- gss_by_issue %>%
-  mutate(model = map(data, ~model_function(.))) %>%
+# For each issue, run 'fi3_model_function2':
+fig3_models_data2 <- gss_by_issue %>%
+  mutate(model = map(data, ~fi3_model_function2(.))) %>%
   select(-data)
 
 # For each issue, make reference grids:
@@ -215,7 +215,7 @@ new_data_A <- gss %>%
   group_by(time, issue, sex, race) %>%
   count()
 
-reference_grid_A <- models_data %>%
+reference_grid_A <- fig3_models_data2 %>%
   mutate(ref_grid = map(model, ~emmeans::ref_grid(.) @ grid)) %>%
   unnest(ref_grid) %>%
   select(-time, -`.wgt.`) %>%
@@ -266,7 +266,7 @@ Estimate linear effects of ideology on the support for each moral policy:
 
 # ! If you ran 'model_function' in the last chunk, there is no need to run it again. 
 # # For each issue, run 'model_function':
-# models_data <- gss_by_issue %>%
+# fig3_models_data2 <- gss_by_issue %>%
 #   mutate(model = map(data, ~model_function(.))) %>%
 #   select(-data)
 
@@ -275,7 +275,7 @@ new_data_B <- gss %>%
   group_by(polviews_cont_sc, issue, sex, race) %>%
   count()
 
-reference_grid_B <- models_data %>%
+reference_grid_B <- fig3_models_data2 %>%
   mutate(ref_grid = map(model, ~emmeans::ref_grid(.) @ grid)) %>%
   unnest(ref_grid) %>%
   select(-polviews_cont_sc, -`.wgt.`) %>%
@@ -336,7 +336,7 @@ Estimate linear effects of cognitive ability on the support for each moral polic
 
 # ! If you ran 'model_function' in the last chunk, there is no need to run it again. 
 # # For each issue, run 'model_function':
-# models_data <- gss_by_issue %>%
+# fig3_models_data2 <- gss_by_issue %>%
 #   mutate(model = map(data, ~model_function(.))) %>%
 #   select(-data)
 
@@ -345,7 +345,7 @@ new_data_C <- gss %>%
   group_by(wordsum_sc, issue, sex, race) %>%
   count()
 
-reference_grid_C <- models_data %>%
+reference_grid_C <- fig3_models_data2 %>%
   mutate(ref_grid = map(model, ~emmeans::ref_grid(.) @ grid)) %>%
   unnest(ref_grid) %>%
   select(-wordsum_sc, -`.wgt.`) %>%
@@ -409,7 +409,7 @@ gss_by_issue_polviews <- gss %>%
   nest()
 
 # The function below runs the model and returns a summary of the model's coefficients: 
-model_function <- function(data){
+fig4_model_function <- function(data){
   m <- glm(opinion ~ time + wordsum_sc + educ_sc + age_sc + sex + race + log_fincome_sc + news_cont_sc,
                      data,
                      weights = wgt,
@@ -421,26 +421,26 @@ model_function <- function(data){
   return(m_sum)
 }
 
-# For each issue, run 'model_function':
-models_data <- gss_by_issue_polviews %>%
-  mutate(model = map(data, ~model_function(.))) %>%
+# For each issue, run 'fig4_model_function':
+fig4_models_data <- gss_by_issue_polviews %>%
+  mutate(model = map(data, ~fig4_model_function(.))) %>%
   select(-data)
   
-# Unnest 'models_data' to get the effect of cognitive ability:
-coefficients <- models_data %>%
+# Unnest 'fig4_models_data' to get the effect of cognitive ability:
+fig4_coefficients <- fig4_models_data %>%
   unnest() %>% 
   select(issue, hvfl_advantage, polviews_full, var, effect = Estimate) %>% 
   # Filter effect of cognitive ability:
   filter(var == "wordsum_sc")
 
 # For each ideology, calculate the correlation between the effect of cognitive ability and hvfl_advantage:
-r_sq <- coefficients %>% 
+r_sq <- fig4_coefficients %>% 
   group_by(polviews_full) %>%
   summarise(r_sq = round(cor(hvfl_advantage, effect)^2*100)) %>%
   mutate(r_sq = paste0(r_sq, "%")) 
 
 # Plot:
-coefficients %>% 
+fig4_coefficients %>% 
   ggplot(aes(hvfl_advantage, effect, label = issue)) +
   geom_point(size = 1.5, shape = 19, color = "#12213B", alpha = .5) +
   geom_smooth(size = .7, method = "lm", fullrange = TRUE, color = "grey10") +
@@ -457,7 +457,7 @@ ggsave("../figures/figure4.jpeg", dpi = 350, width = 14, height = 14*.3)
 Correlation between interaction effects and issues' argument advantage:
 ```{r}
 
-cor_data <- coefficients %>% 
+cor_data <- fig4_coefficients %>% 
   # Average cognitive ability effects across ideology:
   group_by(issue, hvfl_advantage) %>% 
   summarise(avg_wordsum_eff = mean(effect))
